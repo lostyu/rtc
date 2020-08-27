@@ -1,0 +1,31 @@
+{
+  "name": "demo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "webpack --config webpack.config.js",
+    "dev": "webpack-dev-server --config webpack.config.js",
+    "build": "webpack --config webpack.config.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bootstrap-material-design": "^4.1.1",
+    "css-loader": "^4.2.2",
+    "html-webpack-plugin": "^4.3.0",
+    "jquery": "^3.5.1",
+    "less": "^3.12.2",
+    "less-loader": "^7.0.0",
+    "popper.js": "^1.16.1",
+    "style-loader": "^1.2.1",
+    "trtc-js-sdk": "^4.6.1",
+    "webpack": "^4.44.1",
+    "webpack-cli": "^3.3.12"
+  },
+  "devDependencies": {
+    "copy-webpack-plugin": "^6.0.3",
+    "webpack-dev-server": "^3.11.0"
+  }
+}
