@@ -1,1 +1,3 @@
-import "./assets/css/index.less";
+import { init } from "./common";
+
+init();
