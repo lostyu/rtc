@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+  <style>
+    .box {
+      display: flex;
+      flex-direction: column;
+      width: 1000px;
+      height: 600px;
+      border: 1px solid #ddd;
+    }
+
+    #local_stream {
+      flex: 1;
+      width: 500px;
+      height: 300px;
+    }
+
+    #remoteBox {
+      flex: 1;
+      width: 500px;
+      height: 300px;
+    }
+    #remoteBox > div{
+      height: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <input id="userId" name="userId" value="" />
+  <input id="roomId" name="roomId" value="" />
+  <input id="sendBtn" type="button" value="发起视频通话" />
+
+  <button id="leaveRoom">离开房间</button>
+
+  <div class="box">
+    <div id="local_stream"></div>
+
+    <div id="remoteBox">
+
+    </div>
+  </div>
+
+  <script src="js/jquery-3.2.1.min.js"></script>
+  <script src="js/lib-generate-test-usersig.min.js"></script>
+  <script src="js/GenerateTestUserSig.js"></script>
+  <script src="js/trtc.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+
+  </script>
+</body>
+
+</html>
