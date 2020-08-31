@@ -1,173 +1,297 @@
 class App {
   constructor() {
-    this.remoteStreamArr = []
+    this.isJoined = false;
+    this.isPublished = false;
+    this.localStream = null;
+
+    this.remoteStreamArr = [];
     this.initInfo();
     this.bindEvent();
   }
-  // 发起视频请求
-  sendRequest() {
-    this.join();
+
+  async api_createRoom(userId, roomId) {
+    const res = await $.get("http://localhost:3000/api/getRoom", { roomId });
+    if (res.length === 0) {
+      await $.get("http://localhost:3000/api/createRoom", { userId, roomId });
+    }
+  }
+
+  // toggle room
+  toggleRoom() {
+    $(".wrap").hide();
+    $(".room").show();
+    $(".room").css("display", "flex");
   }
 
   // 1加入房间
   async join() {
+    if (this.isJoined) {
+      console.log("已经加入房间，不能重复加入房间");
+      return;
+    }
+
     //      创建连接
-    const {
-      sdkAppId,
-      userSig
-    } = genTestUserSig(this.userId)
-    this.sdkAppId = sdkAppId
-    this.userSig = userSig
+    const { sdkAppId, userSig } = genTestUserSig(this.userId);
+    this.sdkAppId = sdkAppId;
+    this.userSig = userSig;
 
     this.client = TRTC.createClient({
-      mode: 'rtc',
+      mode: "rtc",
       sdkAppId: this.sdkAppId,
       userId: this.userId,
-      userSig: this.userSig
-    })
-
-    //      加入房间
-
-    this.client.join({
-      roomId: this.roomId
-    }).then(async () => {
-      console.log(`@@@加入房间${this.roomId}成功`);
-
-      await this.createLocalStream()
-      await this.createRemoteStream()
-
-    }).catch(error => {
-      console.error('@@@Join room failed: ' + error);
+      userSig: this.userSig,
     });
 
-  }
+    // 绑定事件
+    this.handleEvents();
 
+    try {
+      await this.client.join({ roomId: this.roomId });
+      console.log("加入房间成功");
+      this.isJoined = true;
 
-  // 2发布本地流
-  createLocalStream() {
-    //      创建本地流
-    this.localStream = TRTC.createStream({
-      audio: true,
-      video: true
-    })
-    //      初始化
-    this.localStream.initialize().catch(error => {
-      console.error('@@@failed initialize localStream ' + error);
-
-    }).then(() => {
-      console.log('@@@初始化本地流成功');
-      this.localStream.play('local_stream');
-
-      //      发布
-      this.client.publish(this.localStream).then(() => {
-        // 本地流发布成功
-        console.log(`@@@本地流发布成功`);
-      });
-    })
-  }
-
-  // 3订阅远端流
-  createRemoteStream() {
-    //      监听流添加
-    this.client.on('stream-added', event => {
-      const remoteStream = event.stream;
-
-      //      客户端订阅远端流
-      this.client.subscribe(remoteStream, {
+      this.localStream = TRTC.createStream({
+        video: true,
         audio: true,
-        video: true
-      }).catch(e => {
-        console.error('failed to subscribe remoteStream', e);
       });
-    });
+      // this.localStream.setVideoProfile("1080p");
 
-    //      监听远端流已订阅
-    this.client.on('stream-subscribed', event => {
-      //      播放远端流
-      const remoteStream = event.stream;
-      const id = remoteStream.getId()
+      try {
+        await this.localStream.initialize();
+        console.log("initialize local stream success");
 
-      console.log('远端流已订阅', id);
-      this.remoteStreamArr.push(id)
+        this.api_createRoom(this.userId, this.roomId);
 
-      $('#remoteBox').append($('<div id="remote_stream_' + id + '"></div>'))
-      remoteStream.play('remote_stream_' + id)
-    })
+        this.toggleRoom();
 
-  }
+        this.localStream.on("player-state-changed", (event) => {
+          console.log(`local stream ${event.type} player is ${event.state}`);
+        });
+        this.localStream.play("local_stream");
 
-  unPublish() {
-    return new Promise((resolve, reject) => {
-      // 取消发布本地流
-      this.client.unpublish(this.localStream).then(() => {
-        // 取消发布本地流成功
-        console.log('取消发布本地流成功');
-        resolve();
-      }).catch(e => {
-        console.log('取消发布本地流失败');
-        reject();
-      })
-    })
-
+        await this.publish();
+      } catch (e) {
+        console.error("failed to initialize local stream - " + e);
+      }
+    } catch (e) {
+      console.error("join room failed!", e);
+    }
   }
 
   // 离开房间
   async leave() {
-    await this.unPublish();
-    this.client.leave().then(() => {
-      // leaving room success
-      console.log('离开房间');
-    }).catch(error => {
-      console.error('leaving room failed: ' + error);
+    if (!this.isJoined) {
+      console.warn("leave() - please join() firstly");
+      return;
+    }
+    // ensure the local stream is unpublished before leaving.
+    await this.unpublish();
+
+    // leave the room
+    await this.client.leave();
+
+    this.localStream.stop();
+    this.localStream.close();
+    this.localStream = null;
+    this.isJoined = false;
+  }
+
+  async publish() {
+    if (!this.isJoined) {
+      console.warn("publish() - please join() firstly");
+      return;
+    }
+    if (this.isPublished) {
+      console.warn("duplicate RtcClient.publish() observed");
+      return;
+    }
+    try {
+      await this.client.publish(this.localStream);
+    } catch (e) {
+      console.error("failed to publish local stream " + e);
+      this.isPublished = false;
+    }
+
+    this.isPublished = true;
+  }
+
+  async unpublish() {
+    if (!this.isJoined) {
+      console.warn("unpublish() - please join() firstly");
+      return;
+    }
+    if (!this.isPublished) {
+      console.warn("RtcClient.unpublish() called but not published yet");
+      return;
+    }
+
+    await this.client.unpublish(this.localStream);
+    this.isPublished = false;
+  }
+
+  addView(id) {
+    $("#remoteBox").append($('<div id="remote_stream_' + id + '"></div>'));
+  }
+
+  removeView(id) {
+    if ($("#" + id)[0]) {
+      $("#" + id).remove();
+    }
+  }
+
+  recordTime() {}
+
+  // 监听事件
+  handleEvents() {
+    this.client.on("error", (err) => {
+      console.error(err);
+      alert(err);
+    });
+    this.client.on("client-banned", (err) => {
+      console.error("client has been banned for " + err);
+      alert(err);
+    });
+    // fired when a remote peer is joining the room
+    this.client.on("peer-join", (evt) => {
+      const userId = evt.userId;
+      console.log("peer-join " + userId);
+    });
+    // fired when a remote peer is leaving the room
+    this.client.on("peer-leave", (evt) => {
+      const userId = evt.userId;
+      console.log("peer-leave " + userId);
+    });
+
+    // fired when a remote stream is added
+    this.client.on("stream-added", (evt) => {
+      const remoteStream = evt.stream;
+      const id = remoteStream.getId();
+      const userId = remoteStream.getUserId();
+      console.log(
+        `remote stream added: [${userId}] ID: ${id} type: ${remoteStream.getType()}`
+      );
+      console.log("subscribe to this remote stream");
+      this.client.subscribe(remoteStream);
+    });
+    // fired when a remote stream has been subscribed
+    this.client.on("stream-subscribed", (evt) => {
+      const remoteStream = evt.stream;
+      const id = remoteStream.getId();
+      this.remoteStreamArr.push(remoteStream);
+      this.addView(id);
+      remoteStream.play("remote_stream_" + id + "");
+      // use customized renderer
+      // if (remoteStream.hasAudio()) {
+      //   updateAudio(id, remoteStream.getAudioTrack());
+      // }
+      // if (remoteStream.hasVideo()) {
+      //   updateVideo(id, remoteStream.getVideoTrack());
+      // }
+      console.log("stream-subscribed ID: ", id);
+    });
+    // fired when the remote stream is removed, e.g. the remote user called Client.unpublish()
+    this.client.on("stream-removed", (evt) => {
+      const remoteStream = evt.stream;
+      const id = remoteStream.getId();
+      // remoteStream.stop();
+      this.remoteStreamArr = this.remoteStreamArr.filter((stream) => {
+        return stream.getId() !== id;
+      });
+      this.removeView("remote_stream_" + id);
+      console.log(`stream-removed ID: ${id}  type: ${remoteStream.getType()}`);
+    });
+
+    this.client.on("stream-updated", (evt) => {
+      const remoteStream = evt.stream;
+      const id = remoteStream.getId();
+      console.log(
+        "type: " +
+          remoteStream.getType() +
+          " stream-updated hasAudio: " +
+          remoteStream.hasAudio() +
+          " hasVideo: " +
+          remoteStream.hasVideo()
+      );
+
+      // use customized renderer
+      // updateAudio(id, remoteStream.getAudioTrack());
+      // updateVideo(id, remoteStream.getVideoTrack());
+    });
+
+    this.client.on("mute-audio", (evt) => {
+      console.log(evt.userId + " mute audio");
+    });
+    this.client.on("unmute-audio", (evt) => {
+      console.log(evt.userId + " unmute audio");
+    });
+    this.client.on("mute-video", (evt) => {
+      console.log(evt.userId + " mute video");
+    });
+    this.client.on("unmute-video", (evt) => {
+      console.log(evt.userId + " unmute video");
+    });
+
+    this.client.on("connection-state-changed", (evt) => {
+      console.log(
+        `RtcClient state changed to ${evt.state} from ${evt.prevState}`
+      );
     });
   }
 
   // 绑定发起视频通话按钮事件
   bindEvent() {
     const _this = this;
-    $('#sendBtn').on('click', function () {
-      _this.sendRequest()
-    })
-
-    $('#leaveRoom').on('click', function () {
+    $("#join").on("click", function () {
+      _this.join();
+    });
+    $("#publish").on("click", function () {
+      _this.publish();
+    });
+    $("#unpublish").on("click", function () {
+      _this.unpublish();
+    });
+    $("#leave").on("click", function () {
       _this.leave();
-    })
+    });
   }
+
   initInfo() {
-    let roomId = this.query('roomId');
-    let userId = this.query('userId');
+    let roomId = this.query("roomId");
+    let userId = this.query("userId");
 
     function randomUser() {
-      return 'user_' + parseInt(Math.random() * 100000000)
+      return "user_" + parseInt(Math.random() * 100000000);
     }
 
     function randomRoom() {
-      return parseInt(Math.random() * 100000)
+      return parseInt(Math.random() * 100000);
     }
-
 
     if (roomId) {
-      $('#roomId').val(roomId);
+      $("#roomId").val(roomId);
     } else {
-      roomId = randomRoom()
-      $('#roomId').val(roomId)
+      roomId = randomRoom();
+      $("#roomId").val(roomId);
     }
     if (userId) {
-      $('#userId').val(userId);
+      $("#userId").val(userId);
     } else {
-      userId = randomUser()
-      $('#userId').val(userId)
+      userId = randomUser();
+      $("#userId").val(userId);
     }
 
-    this.userId = userId
-    this.roomId = roomId
+    this.userId = userId;
+    this.roomId = roomId;
   }
+
   query(name) {
-    const match = window.location.search.match(new RegExp('(\\?|&)' + name + '=([^&]*)(&|$)'));
-    return !match ? '' : decodeURIComponent(match[2]);
+    const match = window.location.search.match(
+      new RegExp("(\\?|&)" + name + "=([^&]*)(&|$)")
+    );
+    return !match ? "" : decodeURIComponent(match[2]);
   }
 }
 
 $(function () {
-  const app = new App()
-})
+  const app = new App();
+});
