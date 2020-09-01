@@ -60,8 +60,8 @@ class App {
         await this.localStream.initialize();
         console.log("initialize local stream success");
 
+        // 初始化视频成功，请求接口创建房间
         this.api_createRoom(this.userId, this.roomId);
-
         this.toggleRoom();
 
         this.localStream.on("player-state-changed", (event) => {
